@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TREEDEVS-ISDM — IndabaX Cameroon 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css.css') }}">
+</head>
+<body>
+
+<!-- ══════════ SIDEBAR ══════════ -->
+<nav id="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-row">
+      <div class="brand-dot"></div>
+      <span class="brand-name">TREEDEVS-ISDM</span>
+    </div>
+    <div class="brand-sub">IndabaX Cameroon 2026</div>
+  </div>
+
+  <div class="sidebar-nav">
+    <div class="sidebar-section-label">Principal</div>
+    <button class="nav-item active" onclick="goTo('dashboard')">
+      <span class="nav-icon">⊞</span> Tableau de bord
+    </button>
+
+    <div class="sidebar-section-label">Analyse Air</div>
+    <button class="nav-item" onclick="goTo('time')">
+      <span class="nav-icon">↗</span> Données &amp; Corrélations
+    </button>
+    <button class="nav-item" onclick="goTo('xai')">
+      <span class="nav-icon">✦</span> IA &amp; Prédictions
+    </button>
+    <button class="nav-item" onclick="goTo('map')">
+      <span class="nav-icon">◎</span> Carte Pollution
+    </button>
+    <button class="nav-item" onclick="goTo('alerts')">
+      <span class="nav-icon">⚠</span> Alertes Santé
+      <span class="nav-badge" id="nav-alert-badge">—</span>
+    </button>
+
+    <div class="sidebar-section-label">Filtres</div>
+    <button class="nav-item" onclick="goTo('regions')">
+      <span class="nav-icon">◈</span> Par région
+    </button>
+    <button class="nav-item" onclick="goTo('time')">
+      <span class="nav-icon">◷</span> Par saison
+    </button>
+    <button class="nav-item" onclick="goTo('predict')">
+      <span class="nav-icon">⌕</span> Prédictions par Ville
+    </button>
+  </div>
+  <img class="sidebar-logo" src="{{ url_for('static', filename='images/indabalogo.webp') }}" alt="indaba logo">
+  <div class="logo-bottom">
+    <div class="logo-item">
+      <img class="logo-icon" src="{{ url_for('static', filename='images/fs.png') }}" alt="Logo">
+    </div>
+    <div class="logo-item">
+      <img class="logo-icon" src="{{ url_for('static', filename='images/rob.png') }}" alt="Logo">
+    </div>
+    <div class="logo-item">
+      <img class="logo-icon" src="{{ url_for('static', filename='images/ISDM.png') }}" alt="Logo">
+    </div>
+  </div>
+</nav>
+
+<div id="global-loader" class="loader hidden">
+  <div class="spinner"></div>
+  <div class="loader-text">Chargement...</div>
+</div>
+<!-- ══════════ MAIN ══════════ -->
+<div id="main">
+
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <button id="menu-toggle" onclick="toggleSidebar()">☰</button>
+    <span class="topbar-title" id="topbar-title">Tableau de bord</span>
+    <div class="topbar-right">
+      <div class="city-select-wrap">
+        <select class="city-select" id="global-city-select" onchange="onCityChange()">
+          <option value="Douala">Douala</option>
+        </select>
+      </div>
+      <div class="notif-btn" onclick="goTo('alerts')">
+        🔔
+        <span class="notif-badge" id="notif-badge">—</span>
+      </div>
+    </div>
+    <div id="sidebar-overlay" onclick="closeSidebar()"></div>
+  </div>
+
+  <!-- CONTENT -->
+  <div id="content">
+
+    <!-- ══════ PAGE: TABLEAU DE BORD ══════ -->
+    <div id="page-dashboard" class="page active">
+
+      <!-- Page heading -->
+      <div class="page-heading">
+        <h1>Tableau de bord</h1>
+        <div class="page-meta" id="db-meta">Qualité de l'air · <span id="db-cities-count">—</span> villes · Données au <span id="db-date">—</span></div>
+        <div class="meta-pills">
+          <div class="meta-pill pill-alert" id="db-alert-pill">⚠ — villes en alerte</div>
+          <div class="meta-pill pill-season" id="db-season-pill">🌿 —</div>
+        </div>
+      </div>
+
+      <!-- KPI Row -->
+      <div class="kpi-row">
+        <!-- IQA Global -->
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <div class="kpi-icon" id="kpi-icon-iqa" style="background:#ffedd5">🌫️</div>
+            <span class="kpi-tag" id="kpi-tag-iqa">—</span>
+          </div>
+          <div class="kpi-value" id="kpi-iqa">—</div>
+          <div class="kpi-label">IQA Global · <span id="kpi-city-name">—</span></div>
+          <div class="kpi-change" id="kpi-iqa-change">— vs mois dernier</div>
+        </div>
+        <!-- O3 -->
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <div class="kpi-icon" style="background:#dbeafe">🔵</div>
+            <span class="kpi-tag" style="background:#dbeafe;color:#1d4ed8" id="kpi-tag-o3">Acceptable</span>
+          </div>
+          <div class="kpi-value" style="color:#3b82f6" id="kpi-o3">—</div>
+          <div class="kpi-label">Ozone O₃ · Limite : 100 µg/m³</div>
+          <div class="kpi-change neu" id="kpi-o3-change">—</div>
+        </div>
+        <!-- NO2 -->
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <div class="kpi-icon" style="background:#dcfce7">🟢</div>
+            <span class="kpi-tag" style="background:#dcfce7;color:#15803d" id="kpi-tag-no2">Bonne</span>
+          </div>
+          <div class="kpi-value" style="color:#22c55e" id="kpi-no2">—</div>
+          <div class="kpi-label">Dioxyde NO₂ · Limite : 40 µg/m³</div>
+          <div class="kpi-change" id="kpi-no2-change">—</div>
+        </div>
+        <!-- PM2.5 -->
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <div class="kpi-icon" style="background:#dcfce7">🟢</div>
+            <span class="kpi-tag" style="background:#dcfce7;color:#15803d" id="kpi-tag-pm25">Bonne</span>
+          </div>
+          <div class="kpi-value" style="color:#22c55e" id="kpi-pm25">—</div>
+          <div class="kpi-label">Particules PM2.5 · Limite : 35 µg/m³</div>
+          <div class="kpi-change" id="kpi-pm25-change">—</div>
+        </div>
+        <!-- Nb villes -->
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <div class="kpi-icon" style="background:#f0fdf4">🏙️</div>
+          </div>
+          <div class="kpi-value" style="color:#16a34a" id="kpi-total-cities">—</div>
+          <div class="kpi-label">Villes surveillées</div>
+          <div class="kpi-change neu" id="kpi-cities-sub">— Données disponibles</div>
+        </div>
+      </div>
+
+      <!-- Stat Row (counts) -->
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="stat-num" style="color:#22c55e" id="stat-good">—</div>
+          <div class="stat-lbl">Air bon</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" style="color:#f97316" id="stat-mod">—</div>
+          <div class="stat-lbl">Air modéré</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" style="color:#ef4444" id="stat-bad">—</div>
+          <div class="stat-lbl">Air mauvais</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" style="color:#991b1b" id="stat-vbad">—</div>
+          <div class="stat-lbl">Très mauvais</div>
+        </div>
+      </div>
+
+      <!-- Main content: Chart + Side panels -->
+      <div class="main-grid">
+
+        <!-- LEFT: chart + top5 -->
+        <div>
+          <!-- Évolution IQA bar chart -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Évolution IQA — <span id="chart-city-label">Douala</span> <span id="chart-year-label">2024</span></div>
+                <div class="card-sub">Valeurs mensuelles moyennes IQA Global</div>
+              </div>
+              <div class="year-toggle" id="year-toggle"></div>
+            </div>
+            <div class="card-body">
+              <div class="chart-box" style="height:260px;position:relative">
+                <canvas id="chart-monthly-iqa"></canvas>
+              </div>
+              <div class="chart-legend">
+                <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div> Bon (&lt; 50)</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div> Modéré (50–100)</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div> Mauvais (&gt; 100)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Top 5 polluées -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Top 5 villes polluées</div>
+                <div class="card-sub">IQA le plus élevé — données réelles</div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="top5-list" id="top5-polluted"></div>
+            </div>
+          </div>
+
+          <!-- Top 5 propres -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Top 5 villes propres</div>
+            </div>
+            <div class="card-body">
+              <div class="top5-list" id="top5-clean"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: regions + meteo + alertes -->
+        <div>
+          <!-- IQA par région -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">IQA moyen par région</div>
+                <div class="card-sub">10 régions du Cameroun</div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="region-list" id="region-list"></div>
+            </div>
+          </div>
+
+          <!-- Conditions météo -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Conditions météo</div>
+                <div class="card-sub" id="weather-meta">— · —</div>
+              </div>
+              <div style="font-size:24px">☀️</div>
+            </div>
+            <div class="card-body">
+              <div class="weather-grid">
+                <div class="weather-item">
+                  <div class="weather-icon">🌡️</div>
+                  <div style="display:flex;align-items:baseline;gap:2px">
+                    <span class="weather-val" id="w-temp">—</span>
+                    <span class="weather-unit">°C</span>
+                  </div>
+                  <div class="weather-lbl">Température</div>
+                </div>
+                <div class="weather-item">
+                  <div class="weather-icon">💨</div>
+                  <div style="display:flex;align-items:baseline;gap:2px">
+                    <span class="weather-val" id="w-wind">—</span>
+                    <span class="weather-unit">km/h</span>
+                  </div>
+                  <div class="weather-lbl">Vent max</div>
+                </div>
+                <div class="weather-item">
+                  <div class="weather-icon">🌧️</div>
+                  <div style="display:flex;align-items:baseline;gap:2px">
+                    <span class="weather-val" id="w-rain">—</span>
+                    <span class="weather-unit">mm</span>
+                  </div>
+                  <div class="weather-lbl">Précipitation</div>
+                </div>
+                <div class="weather-item">
+                  <div class="weather-icon">☀️</div>
+                  <div style="display:flex;align-items:baseline;gap:2px">
+                    <span class="weather-val" id="w-sun">—</span>
+                    <span class="weather-unit">h</span>
+                  </div>
+                  <div class="weather-lbl">Ensoleillement</div>
+                </div>
+              </div>
+              <div class="saison-badge">
+                <span>🌪️</span>
+                <span id="w-saison">—</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Alertes actives -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="alert-header-row">
+                  <div class="card-title">Alertes actives</div>
+                  <span class="alert-count-badge" id="alert-badge-count">—</span>
+                </div>
+                <div class="card-sub">Villes IQA &gt; 120</div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="alerts-scroll" id="alerts-panel"></div>
+              <div class="health-rec" id="health-rec">
+                <div class="health-rec-title">✚ Recommandation santé</div>
+                <div class="health-rec-text" id="health-rec-text">—</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ PAGE: ANALYSE TEMPORELLE ══════ -->
+    <div id="page-time" class="page">
+      <div class="page-heading">
+        <h1>Données &amp; Corrélations</h1>
+        <div class="page-meta">Séries temporelles IQA · Comparaison inter-villes</div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Évolution IQA — 90 derniers jours</div>
+          </div>
+          <select id="time-city-select" class="form-select" onchange="buildTimeCharts()">
+            <option>Douala</option>
+          </select>
+        </div>
+        <div class="card-body">
+          <div class="chart-box" style="height:300px">
+            <canvas id="chart-time-series"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Comparaison villes — IQA actuel</div>
+          </div>
+          <div class="card-body">
+            <div class="chart-box" style="height:260px">
+              <canvas id="chart-compare-cities"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">IQA moyen par saison</div>
+          </div>
+          <div class="card-body">
+            <div class="chart-box" style="height:260px">
+              <canvas id="chart-seasons"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ PAGE: XAI ══════ -->
+    <div id="page-xai" class="page">
+      <div class="page-heading">
+        <h1>IA &amp; Prédictions</h1>
+        <div class="page-meta">Feature Importance · RandomForest · Métriques</div>
+      </div>
+
+      <div class="metrics-row">
+        <div class="metric-chip"><div class="metric-val" id="xai-rmse">15.8617 µg/m³</div><div class="metric-name">RMSE</div></div>
+        <div class="metric-chip"><div class="metric-val" id="xai-mae">15.8617 µg/m³</div><div class="metric-name">MAE</div></div>
+        <div class="metric-chip"><div class="metric-val" id="xai-r2">92,31 %</div><div class="metric-name">R²</div></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Feature Importance — Modèle Global</div>
+          </div>
+          <div class="card-body">
+            <div class="fi-bar-list" id="fi-bars"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Importance relative (%)</div>
+          </div>
+          <div class="card-body">
+            <div class="chart-box" style="height:280px">
+              <canvas id="chart-fi-donut"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Réel vs Prédit — Scatter RandomForest</div>
+          <select id="xai-city-select" class="form-select" onchange="buildXAI()">
+            <option>Douala</option>
+          </select>
+        </div>
+        <div class="card-body">
+          <div id="shap-text" style="padding:12px;background:var(--bg);border-radius:var(--radius-sm);font-size:12px;line-height:1.7;margin-bottom:16px"></div>
+          <div class="chart-box" style="height:240px">
+            <canvas id="chart-scatter"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ PAGE: CARTE ══════ -->
+    <div id="page-map" class="page">
+      <div class="page-heading">
+        <h1>Carte Pollution</h1>
+        <div class="page-meta">Distribution géographique de l'IQA · Cameroun</div>
+      </div>
+      <div class="card">
+        <div class="card-body" style="padding:0">
+          <div id="map"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ PAGE: ALERTES ══════ -->
+    <div id="page-alerts" class="page">
+      <div class="page-heading">
+        <h1>Alertes Santé</h1>
+        <div class="page-meta">Villes IQA &gt; 120 · Recommandations en temps réel</div>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-value" style="color:var(--red)" id="al-crit">—</div>
+          <div class="kpi-label">Alertes Critiques (IQA &gt; 200)</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-value" style="color:#dc2626" id="al-high">—</div>
+          <div class="kpi-label">Alertes Élevées (IQA 151–200)</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-value" style="color:var(--orange)" id="al-mod">—</div>
+          <div class="kpi-label">Alertes Modérées (IQA 121–150)</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-value" style="color:var(--green-mid)" id="al-total">—</div>
+          <div class="kpi-label">Total alertes actives</div>
+        </div>
+      </div>
+
+      <div id="alerts-full-list"></div>
+    </div>
+
+    <!-- ══════ PAGE: PAR RÉGION ══════ -->
+    <div id="page-regions" class="page">
+      <div class="page-heading">
+        <h1>IQA par Région</h1>
+        <div class="page-meta">Toutes les régions du Cameroun · IQA moyen</div>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <div class="chart-box" style="height:360px">
+            <canvas id="chart-regions-bar"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <div class="region-list" id="region-full-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ PAGE: PRÉDICTION ══════ -->
+    <div id="page-predict" class="page">
+      <div class="page-heading">
+        <h1>Prédiction IA</h1>
+        <div class="page-meta">Prédire l'IQA avec le modèle RandomForest</div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Paramètres de prédiction</div>
+        </div>
+        <div class="card-body">
+          <div class="predict-form">
+            <div class="form-group">
+              <label class="form-label">Ville</label>
+              <select class="form-select" id="pred-city" style="width:100%"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Température max (°C)</label>
+              <input type="number" class="form-input" id="pred-temp" value="32" min="10" max="50">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Vitesse vent (km/h)</label>
+              <input type="number" class="form-input" id="pred-wind" value="8" min="0" max="100">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Précipitations (mm)</label>
+              <input type="number" class="form-input" id="pred-rain" value="0" min="0" max="200">
+            </div>
+            <div class="form-group">
+              <label class="form-label">IQA J-1 (lag)</label>
+              <input type="number" class="form-input" id="pred-lag1" value="75" min="0" max="300">
+            </div>
+            <div class="form-group" style="align-items:flex-end">
+              <button class="btn-primary" onclick="runPrediction()" id="pred-btn" style="width:100%">
+                ⚡ Prédire l'IQA
+              </button>
+            </div>
+          </div>
+
+          <div id="pred-result" class="pred-result">
+            <div class="pred-main">
+              <div>
+                <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px">IQA PRÉDIT</div>
+                <div class="pred-iqa" id="pr-iqa">—</div>
+              </div>
+              <div class="pred-meta">
+                <div class="pred-level" id="pr-level">—</div>
+                <div class="pred-desc" id="pr-desc">—</div>
+                <div style="margin-top:10px;display:flex;gap:20px">
+                  <div>
+                    <div style="font-size:10px;color:var(--text-muted)">Score Risque</div>
+                    <div style="font-size:18px;font-weight:800" id="pr-risk">—</div>
+                  </div>
+                </div>
+                <div class="pred-gauge-track">
+                  <div class="pred-gauge-fill" id="pr-gauge"></div>
+                </div>
+              </div>
+            </div>
+            <div id="pr-features" class="fi-bar-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+<script src="{{ url_for('static', filename='index.js') }}"></script>
+</body>
+</html>
